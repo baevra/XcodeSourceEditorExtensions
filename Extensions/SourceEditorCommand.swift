@@ -24,7 +24,7 @@ class SourceEditorCommand: NSObject, XCSourceEditorCommand {
     let selectedLines = selectionRange.map { ($0, lines[$0]) }
 
     for (index, line) in selectedLines {
-      guard line.contains(regex: #"func\s.+\(.*\).*\{"#) else {
+      guard line.contains(regex: #"(\ *)(.+\()(.+)(\).*)"#) else {
         continue
       }
       let formattedLines = formatFunctions(at: line).reversed()
@@ -32,29 +32,42 @@ class SourceEditorCommand: NSObject, XCSourceEditorCommand {
       for formattedLine in formattedLines {
         invocation.buffer.lines.insert(formattedLine, at: index)
       }
+      break
     }
     invocation.buffer.selections.removeAllObjects()
   }
 }
 
 func formatFunctions(at line: String) -> [String] {
+  let identationSpaces = getIdentationSpaces(at: line)
   var formattedLines: [String] = []
-  let pattern = #"(func\s\w+\()(.*)(\).+)"#
+  let pattern = #"(\ *)(.+\()(.+)(\).*)"#
   let regex = try? NSRegularExpression(pattern: pattern)
   let range = NSRange(location: 0, length: line.utf16.count)
   let matches = regex?.matches(in: line, range: range)
 
   for match in matches ?? [] {
-    let firstLine = line.substring(with: match.range(at: 1))
-    let middleLines = line.substring(with: match.range(at: 2))
+    let firstLine = line.substring(with: match.range(at: 2))
+    let middleLines = line.substring(with: match.range(at: 3))
       .replacingOccurrences(of: ", ", with: ",  ")
       .components(separatedBy: "  ")
       .filter { !$0.isEmpty }
       .map { "  " + $0 }
-    let lastLine = line.substring(with: match.range(at: 3))
+    let lastLine = line.substring(with: match.range(at: 4))
     formattedLines += [firstLine] + middleLines + [lastLine]
   }
   return formattedLines
+    .map { identationSpaces + $0 }
+}
+
+func getIdentationSpaces(at line: String) -> String {
+  let pattern = #"(^\s+)"#
+  let regex = try? NSRegularExpression(pattern: pattern)
+  let range = NSRange(location: 0, length: line.utf16.count)
+  let match = regex?.matches(in: line, range: range).first
+
+  guard let match else { return "" }
+  return line.substring(with: match.range(at: 1))
 }
 
 extension String {
